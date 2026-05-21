@@ -1,0 +1,25 @@
+# Environments
+.env
+.env.local
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+myenv/
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build/Logs
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
