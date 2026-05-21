@@ -1,6 +1,7 @@
 import asyncio
 import json
 import base64
+import time
 import websockets
 
 # ElevenLabs default multilingual voice (George) – used as fallback when the
@@ -18,6 +19,10 @@ class ElevenTTS:
         self._ws          = None   # active ElevenLabs WS
         self._recv_task   = None   # background audio-receiver coroutine
         self._cancelled   = False  # interrupt flag
+
+        # ── Phase 1: Instrumentation ──────────────────────────────────────
+        self._session_start = None  # when start_session() was called
+        self._first_audio   = None  # when first audio byte arrived from ElevenLabs
 
     # ── Voice configuration ───────────────────────────────────────────────────
 
@@ -40,6 +45,10 @@ class ElevenTTS:
             additional_headers={"xi-api-key": self.api_key}
         )
 
+        # ── Phase 4: Aggressive chunk schedule ────────────────────────────
+        # BEFORE: [120, 160, 250, 290] — waits for 120 chars before first audio.
+        # AFTER:  [50, 90, 120, 150]   — starts generating at 50 chars.
+        # This alone cuts ~200-400ms from first-audio latency.
         bos = {
             "text": " ",
             "voice_settings": {
@@ -49,7 +58,7 @@ class ElevenTTS:
                 "use_speaker_boost": True
             },
             "generation_config": {
-                "chunk_length_schedule": [120, 160, 250, 290]
+                "chunk_length_schedule": [50, 90, 120, 150]
             }
         }
         await self._ws.send(json.dumps(bos))
@@ -80,6 +89,14 @@ class ElevenTTS:
                 data = json.loads(message)
                 if data.get("audio"):
                     chunk = base64.b64decode(data["audio"])
+
+                    # ── Phase 1: Log first audio byte latency ─────────────
+                    if self._first_audio is None:
+                        self._first_audio = time.perf_counter()
+                        if self._session_start:
+                            delta = (self._first_audio - self._session_start) * 1000
+                            print(f"[⏱ TTS] First audio byte from ElevenLabs: {delta:.0f}ms after session start")
+
                     try:
                         await self.ws_client.send_bytes(chunk)
                     except Exception:
@@ -106,7 +123,11 @@ class ElevenTTS:
     async def start_session(self):
         """Open a fresh ElevenLabs connection and start receiving audio."""
         self._cancelled = False
+        self._first_audio = None
+        self._session_start = time.perf_counter()
         await self._open()
+        _open_done = time.perf_counter()
+        print(f"[⏱ TTS] WebSocket connect: {(_open_done - self._session_start)*1000:.0f}ms")
         self._recv_task = asyncio.create_task(self._receive_audio())
 
     async def flush(self):

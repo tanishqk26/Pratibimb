@@ -19,6 +19,7 @@ export default function Voice() {
   const playbackContextRef = useRef(null);
   const nextStartTimeRef = useRef(0);
   const isListeningRef = useRef(false);
+  const scheduledSourcesRef = useRef([]);  // track active BufferSources for interrupt
 
   useEffect(() => {
     // Connect to FastAPI WebSocket Gateway
@@ -37,11 +38,14 @@ export default function Voice() {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "interrupt") {
-            if (playbackContextRef.current) {
-              playbackContextRef.current.close();
-              playbackContextRef.current = null;
+            // Cancel all scheduled audio sources without destroying the context
+            scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch(_){} });
+            scheduledSourcesRef.current = [];
+            if (playbackContextRef.current && playbackContextRef.current.state !== "closed") {
+              nextStartTimeRef.current = playbackContextRef.current.currentTime;
+            } else {
+              nextStartTimeRef.current = 0;
             }
-            nextStartTimeRef.current = 0;
           }
         } catch (e) {}
       } else {
@@ -60,9 +64,14 @@ export default function Voice() {
   }, []);
 
   const playPCMChunk = (arrayBuffer) => {
+    // Reuse existing AudioContext — only create if truly missing
     if (!playbackContextRef.current || playbackContextRef.current.state === "closed") {
       playbackContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
       nextStartTimeRef.current = playbackContextRef.current.currentTime;
+    }
+    // Resume if suspended (e.g. browser autoplay policy)
+    if (playbackContextRef.current.state === "suspended") {
+      playbackContextRef.current.resume();
     }
 
     const int16Array = new Int16Array(arrayBuffer);
@@ -81,6 +90,12 @@ export default function Voice() {
     const startTime = Math.max(playbackContextRef.current.currentTime, nextStartTimeRef.current);
     source.start(startTime);
     nextStartTimeRef.current = startTime + audioBuffer.duration;
+
+    // Track source for interrupt cancellation; auto-remove when finished
+    scheduledSourcesRef.current.push(source);
+    source.onended = () => {
+      scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== source);
+    };
   };
 
   const startRecording = async () => {
@@ -131,13 +146,14 @@ export default function Voice() {
 
   // ── Stop all currently queued TTS playback immediately ──────────────────
   const stopPlayback = () => {
-    if (playbackContextRef.current) {
-      try {
-        playbackContextRef.current.close();
-      } catch (_) {}
-      playbackContextRef.current = null;
+    // Cancel all scheduled sources without destroying the context
+    scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch(_){} });
+    scheduledSourcesRef.current = [];
+    if (playbackContextRef.current && playbackContextRef.current.state !== "closed") {
+      nextStartTimeRef.current = playbackContextRef.current.currentTime;
+    } else {
+      nextStartTimeRef.current = 0;
     }
-    nextStartTimeRef.current = 0;
   };
 
   useEffect(() => {
