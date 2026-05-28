@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from services.memory_service import RedisMemoryService
 
 class ConversationEngine:
 
@@ -11,6 +12,9 @@ class ConversationEngine:
 
         self._active_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self.session_messages = []
+        self.session_id = None
+        self.memory_service = RedisMemoryService()
 
     def is_speaking(self) -> bool:
         """True if a pipeline task is currently running."""
@@ -39,6 +43,7 @@ class ConversationEngine:
 
     async def _process_stream(self, text: str, lang_code: str = "en-IN"):
         buffer = ""
+        full_ai_text = ""
         # ── Phase 3: Clause-level chunking ─────────────────────────────────
         # Flush on sentence-enders AND mid-sentence pauses (commas, dashes).
         # This sends shorter text to TTS much sooner.
@@ -52,11 +57,26 @@ class ConversationEngine:
         _chunks_sent = 0
 
         try:
-            # ── Phase 2: Parallel TTS connect + LLM start ──────────────────
-            # Start both concurrently instead of sequentially.
-            # Previously: await start_session() THEN start LLM → 300-500ms wasted.
-            llm_stream = self.llm.generate_stream(text, lang_code)
-            tts_ready = asyncio.ensure_future(self.tts.start_session())
+            session_context = []
+            if self.session_id:
+                try:
+                    session_context = await self.memory_service.fetch_session_context(self.session_id, limit=15)
+                except Exception as e:
+                    print(f"[Engine] Failed to fetch session context: {e}")
+
+            # Fallback to local in-memory messages if Redis/DB returned nothing (e.g. Redis is down 
+            # or it's a new session whose messages aren't saved/cached yet).
+            # Note: self.session_messages[-1] is the current user text query we are processing now,
+            # so we exclude it to only pass previous message history as context.
+            if not session_context and self.session_messages:
+                session_context = self.session_messages[:-1]
+
+            # ── Parallel TTS connect + LLM start ──────────────────────────
+            # Start ElevenLabs WS connect concurrently with LLM request.
+            # Saves ~250ms.  Staleness guard: if LLM takes >3s we reconnect.
+            llm_stream = self.llm.generate_stream(text, lang_code, session_context=session_context)
+            tts_future = asyncio.ensure_future(self.tts.start_session())
+            _tts_connect_time = time.perf_counter()
 
             print(f"Pratibimb (Streaming):", end=" ")
 
@@ -65,21 +85,29 @@ class ConversationEngine:
                 if _first_llm_token is None:
                     _first_llm_token = time.perf_counter()
                     print(f"\n[⏱ LLM first token: {(_first_llm_token - _pipeline_start)*1000:.0f}ms]")
-                    # Ensure TTS session is ready before first send
-                    await tts_ready
+
+                    # Ensure TTS session is ready
+                    await tts_future
+
+                    # Staleness guard: if LLM took >3s, WS was idle too long
+                    idle_time = _first_llm_token - _tts_connect_time
+                    if idle_time > 3.0:
+                        print(f"[TTS] WS idle {idle_time:.1f}s — reconnecting fresh.")
+                        await self.tts.cancel()
+                        await self.tts.start_session()
 
                 buffer += chunk
+                full_ai_text += chunk
                 print(chunk, end="", flush=True)
 
                 # ── Clause-level flushing logic ────────────────────────────
                 should_flush = False
                 flush_text = ""
 
-                # Check for punctuation-based split
-                match = list(clause_pattern.finditer(buffer))
+                # Split at FIRST punctuation — send shortest clause to TTS ASAP
+                match = clause_pattern.search(buffer)
                 if match:
-                    last_punct = match[-1]
-                    split_idx = last_punct.end()
+                    split_idx = match.end()
                     flush_text = buffer[:split_idx].strip()
                     buffer = buffer[split_idx:]
                     should_flush = bool(flush_text)
@@ -117,6 +145,8 @@ class ConversationEngine:
             llm_latency = ((_first_llm_token - _pipeline_start) * 1000) if _first_llm_token else 0
             tts_latency = ((_first_tts_send - _pipeline_start) * 1000) if _first_tts_send else 0
             print(f"[⏱ Pipeline] total={total:.0f}ms | LLM-first-token={llm_latency:.0f}ms | first-TTS-send={tts_latency:.0f}ms | chunks={_chunks_sent}")
+            
+            return full_ai_text
 
         except asyncio.CancelledError:
             print("[Engine] Stream interrupted.")
@@ -135,7 +165,19 @@ class ConversationEngine:
 
         try:
             print(f"\nUser [{lang_code}]: {text}")
-            await self._process_stream(text, lang_code)
+            self.session_messages.append({"role": "user", "message": text})
+            
+            # Non-blocking async save of User message to Redis
+            if self.session_id:
+                asyncio.create_task(self.memory_service.save_message(self.session_id, "user", text))
+
+            ai_text = await self._process_stream(text, lang_code)
+            if ai_text:
+                self.session_messages.append({"role": "twin", "message": ai_text})
+                
+                # Non-blocking async save of Twin response to Redis
+                if self.session_id:
+                    asyncio.create_task(self.memory_service.save_message(self.session_id, "twin", ai_text))
 
         except asyncio.CancelledError:
             print("[Engine] Pipeline cancelled by PTT interrupt.")

@@ -10,3 +10,4 @@ pydantic[email]
 pydantic-settings
 python-multipart
 aiofiles
+google-genai

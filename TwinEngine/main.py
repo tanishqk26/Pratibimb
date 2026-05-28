@@ -26,7 +26,7 @@ async def voice_websocket(websocket: WebSocket):
 
     client = AsyncSarvamAI(api_subscription_key=SARVAM_API_KEY)
     stt = SarvamSTT(client)
-    await stt.connect()
+    # STT connection is deferred until we have the twin context (for language filtering)
 
     llm = GeminiEngine(GEMINI_API_KEY)
     tts = ElevenTTS(ELEVENLABS_API_KEY, websocket)
@@ -42,14 +42,22 @@ async def voice_websocket(websocket: WebSocket):
     _stt_collector_task: asyncio.Task | None = None
 
     # ── Wait for twin_context handshake ──────────────────────────────────────
+    twin_language_codes = None  # will hold parsed BCP-47 list
+    twin_data = None
     try:
         first = await asyncio.wait_for(websocket.receive(), timeout=5.0)
         if "text" in first:
             msg = json.loads(first["text"])
             if msg.get("type") == "twin_context":
                 twin = msg.get("twin", {})
+                twin_data = twin
                 llm.set_twin(twin)
-                print(f"[Main] Twin context loaded: {twin.get('name', 'Unknown')}")
+                
+                # Extract session_id or generate a new random UUID
+                import uuid
+                session_id = msg.get("session_id") or str(uuid.uuid4())
+                engine.session_id = session_id
+                print(f"[Main] Twin context loaded: {twin.get('name', 'Unknown')} (session_id={session_id})")
 
                 # Apply cloned voice if the twin has one stored
                 voice_id = twin.get("voice_id") or ""
@@ -58,10 +66,21 @@ async def voice_websocket(websocket: WebSocket):
                     tts.set_voice(voice_id)
                 else:
                     print("[Main] No cloned voice_id found — using default ElevenLabs voice.")
+
+                # Parse language codes for STT filtering
+                languages_str = twin.get("languages") or ""
+                if languages_str.strip():
+                    twin_language_codes = [c.strip() for c in languages_str.split(",") if c.strip()]
+                    print(f"[Main] Twin languages: {twin_language_codes}")
+                else:
+                    print("[Main] No languages configured — STT will auto-detect all.")
     except asyncio.TimeoutError:
         print("[Main] No twin context received, using default persona.")
     except Exception as e:
         print(f"[Main] Error reading twin context: {e}")
+
+    # Connect STT with the twin's language filter (or auto-detect if none set)
+    await stt.connect(language_codes=twin_language_codes)
 
     # ── STT collector — runs only during a PTT press ─────────────────────────
     async def stt_collector():
@@ -159,6 +178,23 @@ async def voice_websocket(websocket: WebSocket):
             _stt_collector_task.cancel()
         await stt.close()
         await tts.cancel()
+        
+        # Save session if there are messages
+        if engine.session_messages and twin_data and twin_data.get("id"):
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    payload = {
+                        "messages": engine.session_messages,
+                        "user_id": twin_data.get("user_id")
+                    }
+                    await client.post(
+                        f"http://localhost:8000/conversations/internal/twin/{twin_data.get('id')}",
+                        json=payload
+                    )
+                    print(f"[Main] Conversation session saved with {len(engine.session_messages)} messages.")
+            except Exception as e:
+                print(f"[Main] Error saving conversation session: {e}")
 
 if __name__ == "__main__":
     import uvicorn

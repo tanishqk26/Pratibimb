@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Home, History, Mic, User, Users } from 'lucide-react';
+import { Home, User, Users } from 'lucide-react';
 
 // Layouts
 import Sidebar from '../components/layout/Sidebar';
@@ -12,7 +12,6 @@ import { NavIcon } from '../components/ui/NavLinks';
 import Landing from '../pages/Landing';
 import Auth from '../pages/Auth';
 import Dashboard from '../pages/Dashboard';
-import Memory from '../pages/Memory';
 import Twins from '../pages/Twins';
 import TwinWorkspace from '../pages/TwinWorkspace'; 
 import Profile from '../pages/Profile';
@@ -57,7 +56,6 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/twins" element={<Twins />} />
           <Route path="/twins/:twinId" element={<TwinWorkspace />} />
-          <Route path="/memory" element={<Memory />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
         

@@ -3,6 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, MessageSquare, History, User, Settings, Plus, Edit2, Trash2, Mic, Upload, X } from 'lucide-react';
 import { ToggleButton } from '../components/ui/Buttons';
+import LanguageSelect, { SARVAM_LANGUAGES } from '../Components/ui/LanguageSelect';
+import MemoriesTab from './Memory';
+
+const parseUTCDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const cleanStr = dateStr.includes('Z') || dateStr.includes('+') ? dateStr : `${dateStr.replace(' ', 'T')}Z`;
+  return new Date(cleanStr);
+};
 
 export default function TwinWorkspace() {
   const { twinId } = useParams();
@@ -106,173 +114,87 @@ export default function TwinWorkspace() {
 
 function ChatTab({ twin }) {
   const navigate = useNavigate();
-  // Mock conversations
-  const conversations = [
-    { id: 1, title: 'Discussion on Quantum States', date: 'Today, 2:30 PM', msgs: 12 },
-    { id: 2, title: 'Morning Check-in', date: 'Yesterday, 9:00 AM', msgs: 4 },
-  ];
+  const [conversations, setConversations] = useState([]);
+  const [selectedConv, setSelectedConv] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConversations(data);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchConversations();
+  }, [twin.id]);
+
+  const handleDelete = async (e, convId) => {
+    e.stopPropagation();
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:8000/conversations/${convId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setConversations(prev => prev.filter(c => c.id !== convId));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl text-white font-medium">Conversations</h2>
         <button 
-          onClick={() => navigate('/voice', { state: { twinId: twin.id } })}
+          onClick={() => navigate('/voice', { state: { twin } })}
           className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition-colors"
         >
           <Mic size={16} /> Start New Chat
         </button>
       </div>
 
-      <div className="space-y-3">
-        {conversations.map(conv => (
-          <div key={conv.id} className="p-5 border border-zinc-800 rounded-xl bg-zinc-950/50 hover:border-zinc-600 transition-colors cursor-pointer flex justify-between items-center group">
-            <div>
-              <h3 className="text-white font-medium mb-1 group-hover:text-emerald-400 transition-colors">{conv.title}</h3>
-              <p className="text-xs text-zinc-500">{conv.date} • {conv.msgs} messages</p>
-            </div>
-            <MessageSquare size={16} className="text-zinc-600 group-hover:text-emerald-400 transition-colors" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MemoriesTab({ twin }) {
-  const [memories, setMemories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
-  const [memoryToDelete, setMemoryToDelete] = useState(null);
-  const [editingMemory, setEditingMemory] = useState(null);
-  const [formData, setFormData] = useState({ title: '', content: '' });
-
-  const fetchMemories = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMemories(data);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMemories();
-  }, [twin.id]);
-
-  const handleOpenPopup = (mem = null) => {
-    if (mem) {
-      setEditingMemory(mem);
-      setFormData({ title: mem.title, content: mem.content || '' });
-    } else {
-      setEditingMemory(null);
-      setFormData({ title: '', content: '' });
-    }
-    setIsPopupOpen(true);
-  };
-
-  const handleClosePopup = () => {
-    setIsPopupOpen(false);
-    setEditingMemory(null);
-    setFormData({ title: '', content: '' });
-  };
-
-  const handleSave = async () => {
-    if (!formData.title.trim()) return;
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      
-      const payload = {
-        title: formData.title,
-        content: formData.content,
-      };
-
-      let url = 'http://localhost:8000/memories';
-      let method = 'POST';
-
-      if (editingMemory) {
-        url = `http://localhost:8000/memories/${editingMemory.id}`;
-        method = 'PUT';
-      } else {
-        payload.twin_id = twin.id;
-      }
-
-      const res = await fetch(url, {
-        method,
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      if (res.ok) {
-        fetchMemories();
-        handleClosePopup();
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleDelete = (id) => {
-    setMemoryToDelete(id);
-  };
-
-  const confirmDelete = async () => {
-    if(!memoryToDelete) return;
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch(`http://localhost:8000/memories/${memoryToDelete}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchMemories();
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setMemoryToDelete(null);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl text-white font-medium">Core Memories</h2>
-        <button onClick={() => handleOpenPopup()} className="flex items-center gap-2 px-4 py-2 border border-zinc-800 text-white rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors">
-          <Plus size={16} /> Add Memory
-        </button>
-      </div>
-
       {loading ? (
-        <div className="text-zinc-500 text-sm">Loading memories...</div>
-      ) : memories.length === 0 ? (
-        <div className="text-zinc-500 text-sm">No memories found. Click "Add Memory" to create one.</div>
+        <div className="text-zinc-500 text-sm">Loading conversations...</div>
+      ) : conversations.length === 0 ? (
+        <div className="text-zinc-500 text-sm">No conversations found.</div>
       ) : (
-        <div className="space-y-4">
-          {memories.map(mem => (
-            <div key={mem.id} className="p-5 border border-zinc-800 rounded-xl bg-zinc-950/50 flex justify-between gap-4">
-              <div>
-                <h4 className="text-white font-medium mb-1">{mem.title}</h4>
-                {mem.content && <p className="text-sm text-zinc-400 mb-2 leading-relaxed">{mem.content}</p>}
-                <span className="text-xs text-zinc-600">{new Date(mem.created_at).toLocaleDateString()}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {conversations.map(conv => (
+            <div 
+              key={conv.id} 
+              onClick={() => setSelectedConv(conv)}
+              className="p-5 border border-zinc-800 rounded-xl bg-zinc-950/50 hover:border-zinc-600 transition-colors cursor-pointer flex flex-col group relative"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-white font-medium group-hover:text-emerald-400 transition-colors line-clamp-1">{conv.title || 'Conversation'}</h3>
+                <button 
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  className="text-zinc-600 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => handleOpenPopup(mem)} className="p-2 text-zinc-500 hover:text-white transition-colors"><Edit2 size={14} /></button>
-                <button onClick={() => handleDelete(mem.id)} className="p-2 text-zinc-500 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
+              <p className="text-xs text-zinc-500 mb-3">{parseUTCDate(conv.created_at).toLocaleString()} • {conv.messages?.length || 0} messages</p>
+              
+              <div className="space-y-2 mt-auto">
+                {conv.messages?.slice(0, 2).map((msg, idx) => (
+                  <p key={idx} className="text-xs text-zinc-400 line-clamp-1">
+                    <span className="font-semibold text-zinc-300">{msg.role === 'user' ? 'You' : twin.name}:</span> {msg.message}
+                  </p>
+                ))}
               </div>
             </div>
           ))}
@@ -280,82 +202,43 @@ function MemoriesTab({ twin }) {
       )}
 
       <AnimatePresence>
-        {isPopupOpen && (
+        {selectedConv && (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-10"
+            onClick={() => setSelectedConv(null)}
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
               exit={{ scale: 0.95, opacity: 0 }} 
-              className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-2xl max-h-full bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl text-white font-medium">{editingMemory ? 'Edit Memory' : 'Add Memory'}</h3>
-                <button onClick={handleClosePopup} className="text-zinc-500 hover:text-white"><X size={20} /></button>
-              </div>
-              
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Title</label>
-                  <input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" placeholder="e.g. User Preferences" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Memory Content</label>
-                  <textarea rows={4} value={formData.content} onChange={(e) => setFormData({...formData, content: e.target.value})} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" placeholder="Write memory details here..."></textarea>
-                </div>
-              </div>
-              
-              <div className="flex gap-3 justify-end">
-                <button 
-                  onClick={handleClosePopup}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleSave}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-black hover:bg-zinc-200 transition-colors"
-                >
-                  Save
+              <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
+                <h3 className="text-lg text-white font-medium">{selectedConv.title || 'Conversation'}</h3>
+                <button onClick={() => setSelectedConv(null)} className="text-zinc-400 hover:text-white transition-colors">
+                  <X size={20} />
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {memoryToDelete && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.95, opacity: 0 }} 
-              className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl"
-            >
-              <h3 className="text-xl text-white font-medium mb-2">Delete Memory</h3>
-              <p className="text-zinc-400 text-sm mb-8">Are you sure you want to delete this memory? This action cannot be undone.</p>
               
-              <div className="flex gap-3 justify-end">
-                <button 
-                  onClick={() => setMemoryToDelete(null)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={confirmDelete}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
-                >
-                  Delete
-                </button>
+              <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                {selectedConv.messages?.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 relative ${
+                      msg.role === 'user' 
+                        ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-50' 
+                        : 'bg-zinc-900 border border-zinc-800 text-zinc-200'
+                    }`}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      <span className="text-[10px] opacity-50 block mt-2 text-right">
+                        {parseUTCDate(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           </motion.div>
@@ -364,6 +247,10 @@ function MemoriesTab({ twin }) {
     </div>
   );
 }
+
+
+
+
 
 const ALLOWED_VOICE_TYPES = 'audio/mp3,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/m4a,audio/x-m4a';
 
@@ -378,7 +265,8 @@ function ProfileTab({ twin, setTwin }) {
     personality_traits: twin.personality_traits || '',
     interests: twin.interests || '',
     image_url: twin.image_url || '',
-    voice_id: twin.voice_id || ''
+    voice_id: twin.voice_id || '',
+    languages: twin.languages || '',
   });
 
   // Voice cloning state
@@ -511,6 +399,18 @@ function ProfileTab({ twin, setTwin }) {
               <input type="text" name="profession" value={formData.profession} onChange={handleChange} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" />
             </div>
           </div>
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Languages</label>
+            <LanguageSelect
+              value={formData.languages}
+              onChange={(val) => setFormData(prev => ({ ...prev, languages: val }))}
+            />
+            <p className="text-xs text-zinc-600 mt-1.5">
+              {formData.languages
+                ? `STT will recognise ${formData.languages.split(',').length} language(s) only.`
+                : 'No languages selected — STT will auto-detect all supported languages.'}
+            </p>
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -547,93 +447,175 @@ function ProfileTab({ twin, setTwin }) {
         </section>
 
         <section className="space-y-4">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Voice Clone</h3>
-          <p className="text-sm text-zinc-500 -mt-2">
-            {twin.voice_id ? 'Re-clone to replace the current voice. Upload 1–2 min of clear speech.' : 'Upload voice samples to create a multilingual cloned voice.'}
-          </p>
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Voice Configuration</h3>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Voice Name</label>
-            <input
-              type="text"
-              value={voiceName}
-              onChange={e => setVoiceName(e.target.value)}
-              maxLength={100}
-              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors"
-              placeholder="e.g. Aryan Deep Voice"
-            />
-            <p className="text-xs text-zinc-600 mt-1.5">{voiceName.trim().length}/100 characters</p>
-          </div>
+          {/* Active voice ID status */}
+          {(voiceIdRef.current || formData.voice_id) && (
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-zinc-400">Active Voice ID</p>
+                <p className="text-xs text-zinc-300 font-mono truncate">{voiceIdRef.current || formData.voice_id}</p>
+              </div>
+            </div>
+          )}
 
-          <label
-            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all
-              ${ !voiceName.trim()
-                  ? 'border-zinc-800/40 bg-zinc-900/10 opacity-50 cursor-not-allowed'
-                  : voiceUploadState.status === 'done'
-                  ? 'border-green-500/40 bg-green-500/5 cursor-pointer'
-                  : voiceUploadState.status === 'error'
-                  ? 'border-red-500/40 bg-red-500/5 cursor-pointer'
-                  : 'border-zinc-800 hover:border-zinc-600 bg-zinc-900/20 cursor-pointer'
-              }`}
-          >
-            <input
-              type="file"
-              accept={ALLOWED_VOICE_TYPES}
-              onChange={handleVoiceUpload}
-              className="hidden"
-              disabled={voiceUploadState.status === 'uploading' || !voiceName.trim()}
-              multiple
-            />
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${ voiceUploadState.status === 'done' ? 'bg-green-500/10' : 'bg-zinc-900' }`}>
-              {voiceUploadState.status === 'uploading' ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : voiceUploadState.status === 'done' ? (
-                <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <Mic size={20} className="text-zinc-400" />
-              )}
+          {/* --- Option 1: Clone from audio --- */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+              <Mic size={14} className="text-zinc-500" />
+              Clone from Audio
+            </h4>
+            <p className="text-sm text-zinc-500">
+              {twin.voice_id ? 'Re-clone to replace the current voice. Upload 1–2 min of clear speech.' : 'Upload voice samples to create a multilingual cloned voice.'}
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Voice Name</label>
+              <input
+                type="text"
+                value={voiceName}
+                onChange={e => setVoiceName(e.target.value)}
+                maxLength={100}
+                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors"
+                placeholder="e.g. Aryan Deep Voice"
+              />
+              <p className="text-xs text-zinc-600 mt-1.5">{voiceName.trim().length}/100 characters</p>
             </div>
 
-            {voiceUploadState.status === 'idle' && (
-              <>
-                <p className="text-sm text-white font-medium">Click to upload voice sample(s)</p>
-                <p className="text-xs text-zinc-500">MP3, WAV, M4A · Select multiple files · 1–2 min recommended</p>
-              </>
-            )}
-            {voiceUploadState.status === 'uploading' && (
-              <>
-                <p className="text-sm text-white font-medium">Cloning voice…</p>
-                <p className="text-xs text-zinc-500">{voiceUploadState.filename}</p>
-              </>
-            )}
-            {voiceUploadState.status === 'done' && (
-              <>
-                <p className="text-sm text-green-400 font-medium">
-                  {twin.voice_id && voiceUploadState.voice_id && voiceUploadState.voice_id !== twin.voice_id
-                    ? 'New voice cloned — will replace old one on save!'
-                    : 'Voice cloned successfully!'}
-                </p>
-                <p className="text-xs text-zinc-500">{voiceUploadState.filename}</p>
-                <p className="text-xs text-zinc-600 font-mono">{voiceUploadState.voice_id}</p>
-                <p className="text-xs text-zinc-500">Click to upload different sample(s)</p>
-              </>
-            )}
-            {voiceUploadState.status === 'error' && (
-              <>
-                <p className="text-sm text-red-400 font-medium">Upload failed</p>
-                <p className="text-xs text-red-400/70">{voiceUploadState.error}</p>
-                <p className="text-xs text-zinc-500">Click to try again</p>
-              </>
-            )}
-          </label>
+            <label
+              className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all
+                ${ !voiceName.trim()
+                    ? 'border-zinc-800/40 bg-zinc-900/10 opacity-50 cursor-not-allowed'
+                    : voiceUploadState.status === 'done'
+                    ? 'border-green-500/40 bg-green-500/5 cursor-pointer'
+                    : voiceUploadState.status === 'error'
+                    ? 'border-red-500/40 bg-red-500/5 cursor-pointer'
+                    : 'border-zinc-800 hover:border-zinc-600 bg-zinc-900/20 cursor-pointer'
+                }`}
+            >
+              <input
+                type="file"
+                accept={ALLOWED_VOICE_TYPES}
+                onChange={handleVoiceUpload}
+                className="hidden"
+                disabled={voiceUploadState.status === 'uploading' || !voiceName.trim()}
+                multiple
+              />
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${ voiceUploadState.status === 'done' ? 'bg-green-500/10' : 'bg-zinc-900' }`}>
+                {voiceUploadState.status === 'uploading' ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : voiceUploadState.status === 'done' ? (
+                  <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <Mic size={20} className="text-zinc-400" />
+                )}
+              </div>
 
-          <div className="space-y-1 text-xs text-zinc-600">
-            <p>• Use a quiet room — no background music or echo</p>
-            <p>• Select multiple files to combine samples for better quality</p>
-            <p>• Hindi, Marathi, and English all work — no language selection needed</p>
-            {twin.voice_id && <p className="text-amber-500/70">• Saving will replace the current voice permanently</p>}
+              {voiceUploadState.status === 'idle' && (
+                <>
+                  <p className="text-sm text-white font-medium">Click to upload voice sample(s)</p>
+                  <p className="text-xs text-zinc-500">MP3, WAV, M4A · Select multiple files · 1–2 min recommended</p>
+                </>
+              )}
+              {voiceUploadState.status === 'uploading' && (
+                <>
+                  <p className="text-sm text-white font-medium">Cloning voice…</p>
+                  <p className="text-xs text-zinc-500">{voiceUploadState.filename}</p>
+                </>
+              )}
+              {voiceUploadState.status === 'done' && (
+                <>
+                  <p className="text-sm text-green-400 font-medium">
+                    {twin.voice_id && voiceUploadState.voice_id && voiceUploadState.voice_id !== twin.voice_id
+                      ? 'New voice cloned — will replace old one on save!'
+                      : 'Voice cloned successfully!'}
+                  </p>
+                  <p className="text-xs text-zinc-500">{voiceUploadState.filename}</p>
+                  <p className="text-xs text-zinc-600 font-mono">{voiceUploadState.voice_id}</p>
+                  <p className="text-xs text-zinc-500">Click to upload different sample(s)</p>
+                </>
+              )}
+              {voiceUploadState.status === 'error' && (
+                <>
+                  <p className="text-sm text-red-400 font-medium">Upload failed</p>
+                  <p className="text-xs text-red-400/70">{voiceUploadState.error}</p>
+                  <p className="text-xs text-zinc-500">Click to try again</p>
+                </>
+              )}
+            </label>
+
+            <div className="space-y-1 text-xs text-zinc-600">
+              <p>• Use a quiet room — no background music or echo</p>
+              <p>• Select multiple files to combine samples for better quality</p>
+              <p>• Hindi, Marathi, and English all work — no language selection needed</p>
+              {twin.voice_id && <p className="text-amber-500/70">• Saving will replace the current voice permanently</p>}
+            </div>
+          </div>
+
+          {/* --- Divider --- */}
+          <div className="flex items-center gap-4 py-2">
+            <div className="flex-1 h-px bg-zinc-800" />
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">or</span>
+            <div className="flex-1 h-px bg-zinc-800" />
+          </div>
+
+          {/* --- Option 2: Manual Voice ID --- */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+              <Edit2 size={14} className="text-zinc-500" />
+              Use Existing Voice ID
+            </h4>
+            <p className="text-sm text-zinc-500">
+              Already have an ElevenLabs voice ID? Paste it below to use it directly.
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Voice ID</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.voice_id}
+                  onChange={e => {
+                    const newId = e.target.value;
+                    setFormData(prev => ({ ...prev, voice_id: newId }));
+                    voiceIdRef.current = newId;
+                    // If the user manually clears the voice_id, reset the upload state
+                    if (!newId.trim()) {
+                      setVoiceUploadState({ status: 'idle', filename: '', voice_id: '', error: '' });
+                    } else {
+                      // Mark as done with manual entry
+                      setVoiceUploadState({ status: 'done', filename: 'Manual entry', voice_id: newId, error: '' });
+                    }
+                  }}
+                  className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                  placeholder="e.g. pNInz6obpgDQGcFmaJgB"
+                />
+                {formData.voice_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, voice_id: '' }));
+                      voiceIdRef.current = '';
+                      setVoiceUploadState({ status: 'idle', filename: '', voice_id: '', error: '' });
+                    }}
+                    className="px-3 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-400/30 transition-colors"
+                    title="Clear voice ID"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-zinc-600 mt-1.5">
+                {formData.voice_id
+                  ? formData.voice_id === twin.voice_id
+                    ? 'This is the currently saved voice ID.'
+                    : '⚠ Different from the saved voice — will update on save.'
+                  : 'Paste an ElevenLabs voice ID to bypass audio cloning.'}
+              </p>
+            </div>
           </div>
         </section>
       </div>
@@ -669,6 +651,21 @@ function ProfileTab({ twin, setTwin }) {
             <span className="text-white">{twin.profession || 'N/A'}</span>
           </div>
         </div>
+        {twin.languages && (
+          <div className="mt-4">
+            <span className="block text-xs text-zinc-500 mb-2">Languages</span>
+            <div className="flex flex-wrap gap-2">
+              {twin.languages.split(',').map((code, i) => {
+                const lang = SARVAM_LANGUAGES.find(l => l.code === code.trim());
+                return (
+                  <span key={i} className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs text-zinc-300">
+                    {lang ? `${lang.name} (${lang.native})` : code.trim()}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="space-y-4">
@@ -711,6 +708,7 @@ function ProfileTab({ twin, setTwin }) {
 function SettingsTab({ twin }) {
   const navigate = useNavigate();
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [clearConvoModalOpen, setClearConvoModalOpen] = useState(false);
   const [deleteTwinModalOpen, setDeleteTwinModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -738,6 +736,24 @@ function SettingsTab({ twin }) {
     } finally {
       setIsProcessing(false);
       setResetModalOpen(false);
+    }
+  };
+
+  const handleClearConversations = async () => {
+    setIsProcessing(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      await fetch(`http://localhost:8000/conversations/twin/${twin.id}/all`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsProcessing(false);
+      setClearConvoModalOpen(false);
     }
   };
 
@@ -798,6 +814,13 @@ function SettingsTab({ twin }) {
         </div>
         
         <div className="flex justify-between items-center pt-4 border-t border-red-900/20">
+          <span className="text-sm text-zinc-300">Clear all conversations</span>
+          <button onClick={() => setClearConvoModalOpen(true)} className="px-4 py-2 border border-red-900/50 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/10 transition-colors">
+            Clear Conversations
+          </button>
+        </div>
+        
+        <div className="flex justify-between items-center pt-4 border-t border-red-900/20">
           <span className="text-sm text-zinc-300">Permanently delete twin</span>
           <button onClick={() => setDeleteTwinModalOpen(true)} className="px-4 py-2 bg-red-500/10 text-red-500 rounded-lg text-sm font-medium hover:bg-red-500 hover:text-white transition-colors">
             Delete Twin
@@ -806,6 +829,42 @@ function SettingsTab({ twin }) {
       </div>
 
       <AnimatePresence>
+        {clearConvoModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }} 
+              className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl"
+            >
+              <h3 className="text-xl text-white font-medium mb-2">Clear Conversations</h3>
+              <p className="text-zinc-400 text-sm mb-8">Are you sure you want to permanently clear all conversation history associated with this twin? This action cannot be undone.</p>
+              
+              <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setClearConvoModalOpen(false)}
+                  disabled={isProcessing}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleClearConversations}
+                  disabled={isProcessing}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {isProcessing ? 'Clearing...' : 'Clear'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {resetModalOpen && (
           <motion.div 
             initial={{ opacity: 0 }} 

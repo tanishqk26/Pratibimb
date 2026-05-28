@@ -21,5 +21,7 @@ class MemoryOut(MemoryBase):
     user_id: int
     twin_id: int
     created_at: datetime
+    is_indexed: bool
+    indexing_status: str
 
     model_config = {"from_attributes": True}

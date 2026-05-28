@@ -9,18 +9,34 @@ class SarvamSTT:
         self._last_sent_hash = None     # dedup guard for pipeline
         self._detected_language = "en-IN"  # last confirmed detected language
 
-    async def connect(self):
+    async def connect(self, language_codes: list[str] | None = None):
+        """
+        Connect to Sarvam STT streaming.
+
+        language_codes: optional list of BCP-47 codes the twin should recognise.
+            - If exactly one code → lock STT to that language.
+            - If multiple or empty/None → use 'unknown' (auto-detect all).
+        """
+        self._language_codes = language_codes  # keep for filtering in receive()
+
+        # Sarvam streaming accepts a single language_code string.
+        # With one language we can pin it; otherwise auto-detect.
+        if language_codes and len(language_codes) == 1:
+            lang = language_codes[0]
+        else:
+            lang = "unknown"
 
         self.ctx = self.client.speech_to_text_streaming.connect(
             model="saarika:v2.5",
             mode="transcribe",
-            language_code="unknown",   # auto-detect: hi-IN, mr-IN, en-IN, etc.
+            language_code=lang,
             sample_rate=16000,
             high_vad_sensitivity=True
         )
 
         self.ws = await self.ctx.__aenter__()
-        print("✅ Connected to Sarvam STT (multilingual auto-detect)")
+        label = lang if lang != "unknown" else f"auto-detect ({', '.join(language_codes)})" if language_codes else "auto-detect (all)"
+        print(f"✅ Connected to Sarvam STT ({label})")
 
     async def send_audio(self, audio):
 

@@ -20,6 +20,10 @@ export default function Voice() {
   const nextStartTimeRef = useRef(0);
   const isListeningRef = useRef(false);
   const scheduledSourcesRef = useRef([]);  // track active BufferSources for interrupt
+  const sessionIdRef = useRef(
+    location.state?.sessionId || 
+    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15))
+  );
 
   useEffect(() => {
     // Connect to FastAPI WebSocket Gateway
@@ -29,7 +33,11 @@ export default function Voice() {
       console.log("WebSocket Connected");
       // Send the twin context immediately so backend can configure the prompt
       if (twin && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "twin_context", twin }));
+        wsRef.current.send(JSON.stringify({ 
+          type: "twin_context", 
+          twin,
+          session_id: sessionIdRef.current 
+        }));
       }
     };
 
@@ -342,7 +350,7 @@ export default function Voice() {
           {/* History */}
           <div className="flex flex-col items-center gap-2">
             <button
-              onClick={() => navigate('/memory')}
+              onClick={() => navigate('/twins')}
               className="w-16 h-16 rounded-full border border-zinc-800 bg-zinc-950/60 text-zinc-400 flex items-center justify-center backdrop-blur-md hover:border-zinc-600 hover:text-white hover:scale-105 transition-all duration-300"
             >
               <History size={20} />

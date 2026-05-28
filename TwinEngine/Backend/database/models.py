@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from pgvector.sqlalchemy import Vector
 
 from database.db import Base
 
@@ -33,6 +34,7 @@ class Twin(Base):
     voice_type = Column(String(50), nullable=True)
     voice_url = Column(String, nullable=True)
     voice_id = Column(String, nullable=True)
+    languages = Column(String, nullable=True)       # comma-separated BCP-47 codes, e.g. "hi-IN,mr-IN,en-IN"
     created_at = Column(DateTime(timezone=True), default=_now)
 
 
@@ -44,4 +46,29 @@ class Memory(Base):
     twin_id = Column(Integer, ForeignKey("twins.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     content = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+    # pgvector columns
+    embedding = Column(Vector(1536), nullable=True)
+    is_indexed = Column(Boolean, default=False, nullable=False)
+    indexing_status = Column(String(50), default="pending", nullable=False)
+
+
+class ConversationSession(Base):
+    __tablename__ = "conversation_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    twin_id = Column(Integer, ForeignKey("twins.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("conversation_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(50), nullable=False)
+    message = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=_now)

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, MessageSquare, ArrowRight, ArrowLeft, Upload, Mic, Search, X } from 'lucide-react';
+import LanguageSelect from '../Components/ui/LanguageSelect';
+import { LocalMemoriesSection } from './Memory';
 
 export default function Twins() {
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export default function Twins() {
         const data = await res.json();
         const twinsWithStats = await Promise.all(data.map(async (twin) => {
           let memoryCount = 0;
+          let conversationCount = 0;
           try {
             const memRes = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
               headers: { Authorization: `Bearer ${token}` }
@@ -32,7 +35,18 @@ export default function Twins() {
           } catch (e) {
             console.error('Failed to fetch memories for twin', twin.id);
           }
-          return { ...twin, memoryCount, conversationCount: 0 };
+          try {
+            const convoRes = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (convoRes.ok) {
+              const convoData = await convoRes.json();
+              conversationCount = convoData.length;
+            }
+          } catch (e) {
+            console.error('Failed to fetch conversations for twin', twin.id);
+          }
+          return { ...twin, memoryCount, conversationCount };
         }));
         setTwins(twinsWithStats);
       }
@@ -184,6 +198,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
     interests: initialData?.interests || '',
     image_url: initialData?.image_url || '',
     voice_id: initialData?.voice_id || '',
+    languages: initialData?.languages || '',
   });
 
   // Voice upload state
@@ -200,9 +215,6 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
 
   const [localMemories, setLocalMemories] = useState([]);
   const [deletedMemories, setDeletedMemories] = useState([]);
-  const [isMemoryPopupOpen, setIsMemoryPopupOpen] = useState(false);
-  const [editingMemoryIndex, setEditingMemoryIndex] = useState(null);
-  const [memoryFormData, setMemoryFormData] = useState({ title: '', content: '' });
 
   useEffect(() => {
     if (initialData?.id) {
@@ -221,47 +233,6 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
       fetchMems();
     }
   }, [initialData]);
-
-  const handleOpenMemoryPopup = (index = null) => {
-    if (index !== null) {
-      const mem = localMemories[index];
-      setEditingMemoryIndex(index);
-      setMemoryFormData({ title: mem.title, content: mem.content || '' });
-    } else {
-      setEditingMemoryIndex(null);
-      setMemoryFormData({ title: '', content: '' });
-    }
-    setIsMemoryPopupOpen(true);
-  };
-
-  const handleCloseMemoryPopup = () => {
-    setIsMemoryPopupOpen(false);
-    setEditingMemoryIndex(null);
-    setMemoryFormData({ title: '', content: '' });
-  };
-
-  const handleSaveMemory = () => {
-    if (!memoryFormData.title.trim()) return;
-    const newMem = { ...memoryFormData };
-    if (editingMemoryIndex !== null) {
-      const updated = [...localMemories];
-      updated[editingMemoryIndex] = { ...updated[editingMemoryIndex], ...newMem, _isEdited: true };
-      setLocalMemories(updated);
-    } else {
-      setLocalMemories([...localMemories, newMem]);
-    }
-    handleCloseMemoryPopup();
-  };
-
-  const handleDeleteMemory = (index) => {
-    const mem = localMemories[index];
-    if (mem.id) {
-      setDeletedMemories([...deletedMemories, mem.id]);
-    }
-    const updated = [...localMemories];
-    updated.splice(index, 1);
-    setLocalMemories(updated);
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -418,6 +389,18 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
                 <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Profession</label>
                 <input type="text" name="profession" value={formData.profession} onChange={handleChange} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" placeholder="e.g. Quantum Architect" />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Languages</label>
+                <LanguageSelect
+                  value={formData.languages}
+                  onChange={(val) => setFormData(prev => ({ ...prev, languages: val }))}
+                />
+                <p className="text-xs text-zinc-600 mt-1.5">
+                  {formData.languages
+                    ? `STT will recognise ${formData.languages.split(',').length} language(s) only.`
+                    : 'No languages selected — STT will auto-detect all supported languages.'}
+                </p>
+              </div>
             </motion.div>
           )}
 
@@ -551,87 +534,75 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
                 <p>• Hindi, Marathi, and English all work natively — no selection needed</p>
                 <p>• Skip this step to use the default AI voice</p>
               </div>
+
+              {/* --- Divider --- */}
+              <div className="flex items-center gap-4 py-2">
+                <div className="flex-1 h-px bg-zinc-800" />
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-zinc-800" />
+              </div>
+
+              {/* --- Manual Voice ID --- */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                  <Edit2 size={14} className="text-zinc-500" />
+                  Use Existing Voice ID
+                </h4>
+                <p className="text-sm text-zinc-500">
+                  Already have an ElevenLabs voice ID? Paste it directly.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Voice ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={formData.voice_id}
+                      onChange={e => {
+                        const newId = e.target.value;
+                        setFormData(prev => ({ ...prev, voice_id: newId }));
+                        voiceIdRef.current = newId;
+                        if (!newId.trim()) {
+                          setVoiceUploadState({ status: 'idle', filename: '', voice_id: '', error: '' });
+                        } else {
+                          setVoiceUploadState({ status: 'done', filename: 'Manual entry', voice_id: newId, error: '' });
+                        }
+                      }}
+                      className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                      placeholder="e.g. pNInz6obpgDQGcFmaJgB"
+                    />
+                    {formData.voice_id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, voice_id: '' }));
+                          voiceIdRef.current = '';
+                          setVoiceUploadState({ status: 'idle', filename: '', voice_id: '', error: '' });
+                        }}
+                        className="px-3 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-400/30 transition-colors"
+                        title="Clear voice ID"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-600 mt-1.5">
+                    Paste an ElevenLabs voice ID to skip audio cloning.
+                  </p>
+                </div>
+              </div>
             </motion.div>
           )}
 
           {step === 5 && (
             <motion.div key="step5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg text-white">Core Memories</h3>
-                <button onClick={() => handleOpenMemoryPopup()} className="text-xs font-medium text-white bg-zinc-800 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-zinc-700">
-                  <Plus size={14} /> Add Memory
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {localMemories.length === 0 ? (
-                  <div className="text-zinc-500 text-sm">No memories added yet.</div>
-                ) : (
-                  localMemories.map((mem, idx) => (
-                    <div key={idx} className="p-5 border border-zinc-800 rounded-xl bg-zinc-900/30 flex justify-between gap-4">
-                      <div>
-                        <h4 className="text-white font-medium mb-1">{mem.title}</h4>
-                        {mem.content && <p className="text-sm text-zinc-400 mb-2">{mem.content}</p>}
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button onClick={() => handleOpenMemoryPopup(idx)} className="p-2 text-zinc-500 hover:text-white transition-colors"><Edit2 size={14} /></button>
-                        <button onClick={() => handleDeleteMemory(idx)} className="p-2 text-zinc-500 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <LocalMemoriesSection 
+                localMemories={localMemories} 
+                setLocalMemories={setLocalMemories} 
+                setDeletedMemories={setDeletedMemories} 
+              />
             </motion.div>
           )}
-
-          <AnimatePresence>
-            {isMemoryPopupOpen && (
-              <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                exit={{ opacity: 0 }} 
-                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-              >
-                <motion.div 
-                  initial={{ scale: 0.95, opacity: 0 }} 
-                  animate={{ scale: 1, opacity: 1 }} 
-                  exit={{ scale: 0.95, opacity: 0 }} 
-                  className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl"
-                >
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl text-white font-medium">{editingMemoryIndex !== null ? 'Edit Memory' : 'Add Memory'}</h3>
-                    <button onClick={handleCloseMemoryPopup} className="text-zinc-500 hover:text-white"><X size={20} /></button>
-                  </div>
-                  
-                  <div className="space-y-4 mb-6">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Title</label>
-                      <input type="text" value={memoryFormData.title} onChange={(e) => setMemoryFormData({...memoryFormData, title: e.target.value})} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" placeholder="e.g. User Preferences" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Memory Content</label>
-                      <textarea rows={4} value={memoryFormData.content} onChange={(e) => setMemoryFormData({...memoryFormData, content: e.target.value})} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zinc-500 transition-colors" placeholder="Write memory details here..."></textarea>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3 justify-end">
-                    <button 
-                      onClick={handleCloseMemoryPopup}
-                      className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={handleSaveMemory}
-                      className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-black hover:bg-zinc-200 transition-colors"
-                    >
-                      Save
-                    </button>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </AnimatePresence>
       </div>
 

@@ -3,6 +3,12 @@ import { motion } from 'motion/react';
 import { User, Mail, Calendar, Edit2, Users, History, MessageSquare } from 'lucide-react';
 import { ProfileField } from '../components/ui/Cards';
 
+const parseUTCDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const cleanStr = dateStr.includes('Z') || dateStr.includes('+') ? dateStr : `${dateStr.replace(' ', 'T')}Z`;
+  return new Date(cleanStr);
+};
+
 export default function Profile() {
   const [user, setUser] = useState({ name: 'Loading...', email: 'Loading...', joined: 'Loading...' });
   const [stats, setStats] = useState([
@@ -31,7 +37,7 @@ export default function Profile() {
           setUser({ 
             name: data.full_name || data.name || data.email.split('@')[0], 
             email: data.email,
-            joined: data.created_at ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'
+            joined: data.created_at ? parseUTCDate(data.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'
           });
         }
 
@@ -43,6 +49,7 @@ export default function Profile() {
         if (twinsRes.ok) {
           const twinsData = await twinsRes.json();
           let memCount = 0;
+          let convoCount = 0;
           
           await Promise.all(twinsData.map(async (twin) => {
             try {
@@ -56,12 +63,24 @@ export default function Profile() {
             } catch (e) {
               console.error('Failed to fetch memory for twin', twin.id);
             }
+
+            try {
+              const convoRes = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (convoRes.ok) {
+                const convoData = await convoRes.json();
+                convoCount += convoData.length;
+              }
+            } catch (e) {
+              console.error('Failed to fetch conversations for twin', twin.id);
+            }
           }));
 
           setStats([
             { label: 'Twins Created', value: twinsData.length.toString(), icon: Users },
             { label: 'Memories Stored', value: memCount.toString(), icon: History },
-            { label: 'Conversations', value: '0', icon: MessageSquare }
+            { label: 'Conversations', value: convoCount.toString(), icon: MessageSquare }
           ]);
         }
       } catch (e) {
