@@ -47,6 +47,28 @@ def on_startup():
         except Exception:
             pass  # column already exists
 
+        # Alter table for avatar_provider
+        try:
+            conn.execute(__import__("sqlalchemy").text(
+                "ALTER TABLE twins ADD COLUMN avatar_provider TEXT"
+            ))
+            conn.commit()
+            logger.info("  ↳ Added 'avatar_provider' column to twins table.")
+        except Exception:
+            pass
+
+        # Alter table for avatar_id
+        try:
+            conn.execute(__import__("sqlalchemy").text(
+                "ALTER TABLE twins ADD COLUMN avatar_id TEXT"
+            ))
+            conn.commit()
+            logger.info("  ↳ Added 'avatar_id' column to twins table.")
+        except Exception:
+            pass
+
+
+
     logger.info("✅ Pratibimb API ready.")
 
 

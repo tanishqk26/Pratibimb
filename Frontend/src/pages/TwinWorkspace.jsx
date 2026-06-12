@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, MessageSquare, History, User, Settings, Plus, Edit2, Trash2, Mic, Upload, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare, History, User, Settings, Plus, Edit2, Trash2, Mic, Upload, X, Video } from 'lucide-react';
 import { ToggleButton } from '../components/ui/Buttons';
 import LanguageSelect, { SARVAM_LANGUAGES } from '../Components/ui/LanguageSelect';
 import MemoriesTab from './Memory';
@@ -39,6 +39,7 @@ export default function TwinWorkspace() {
     };
     fetchTwin();
   }, [twinId]);
+
 
   if (loading) {
     return <div className="text-white text-center py-20">Loading workspace...</div>;
@@ -267,6 +268,8 @@ function ProfileTab({ twin, setTwin }) {
     image_url: twin.image_url || '',
     voice_id: twin.voice_id || '',
     languages: twin.languages || '',
+    avatar_id: twin.avatar_id || '',
+    avatar_provider: twin.avatar_provider || 'liveavatar',
   });
 
   // Voice cloning state
@@ -293,6 +296,8 @@ function ProfileTab({ twin, setTwin }) {
       reader.readAsDataURL(file);
     }
   };
+
+
 
   const handleVoiceUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -444,6 +449,28 @@ function ProfileTab({ twin, setTwin }) {
             <p className="text-sm text-white font-medium mb-1 relative z-10">{formData.image_url ? 'Click to change image' : 'Click to upload image'}</p>
             <p className="text-xs text-zinc-500 relative z-10">PNG, JPG up to 5MB</p>
           </label>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">AI Avatar (Coming Soon)</h3>
+          <p className="text-sm text-zinc-400 mb-6">
+            Custom AI avatar training will be available in a future release. If you already have a LiveAvatar avatar, enter the Avatar ID below.
+          </p>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Avatar ID (Optional)</label>
+            <input
+              type="text"
+              name="avatar_id"
+              value={formData.avatar_id}
+              onChange={handleChange}
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+              placeholder="e.g. la_avatar_123456"
+            />
+            <p className="text-xs text-zinc-600 mt-1.5">
+              If set, Pratibimb will initiate a LiveAvatar streaming video layer.
+            </p>
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -701,6 +728,22 @@ function ProfileTab({ twin, setTwin }) {
           )}
         </div>
       </section>
+
+      {twin.avatar_id && (
+        <section className="space-y-4">
+          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">LiveAvatar Status</h3>
+          <div className="flex items-center gap-4 p-5 border border-zinc-800 rounded-xl bg-zinc-950/30">
+            <div className="min-w-0 flex-1">
+              <span className="inline-block font-medium uppercase tracking-wider text-[10px] px-2 py-0.5 rounded border mb-1.5 text-emerald-400 bg-emerald-400/5 border-emerald-500/20">
+                ACTIVE
+              </span>
+              <p className="text-xs text-zinc-400">
+                Interactive LiveAvatar video rendering is active. (Avatar ID: <span className="font-mono">{twin.avatar_id}</span>)
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

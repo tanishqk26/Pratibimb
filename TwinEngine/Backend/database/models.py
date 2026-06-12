@@ -35,6 +35,8 @@ class Twin(Base):
     voice_url = Column(String, nullable=True)
     voice_id = Column(String, nullable=True)
     languages = Column(String, nullable=True)       # comma-separated BCP-47 codes, e.g. "hi-IN,mr-IN,en-IN"
+    avatar_provider = Column(String(50), nullable=True)
+    avatar_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
 
 

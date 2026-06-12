@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, MessageSquare, ArrowRight, ArrowLeft, Upload, Mic, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, MessageSquare, ArrowRight, ArrowLeft, Upload, Mic, Search, X, Video } from 'lucide-react';
 import LanguageSelect from '../Components/ui/LanguageSelect';
 import { LocalMemoriesSection } from './Memory';
 
@@ -123,6 +123,14 @@ export default function Twins() {
                     <span className="text-white font-medium">{twin.conversationCount ?? 0}</span>
                     <span>Conversations</span>
                   </div>
+                  {twin.avatar_id && (
+                    <div className="flex flex-col">
+                      <span className="font-medium uppercase tracking-wider text-[10px] px-2 py-0.5 rounded border leading-none text-emerald-400 bg-emerald-400/5 border-emerald-500/20">
+                        ACTIVE
+                      </span>
+                      <span className="text-[10px] text-zinc-500 mt-1">LiveAvatar</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 relative z-10">
@@ -186,7 +194,7 @@ export default function Twins() {
 
 function TwinCreationForm({ onCancel, onSuccess, initialData }) {
   const [step, setStep] = useState(1);
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
@@ -199,6 +207,8 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
     image_url: initialData?.image_url || '',
     voice_id: initialData?.voice_id || '',
     languages: initialData?.languages || '',
+    avatar_id: initialData?.avatar_id || '',
+    avatar_provider: initialData?.avatar_provider || 'liveavatar',
   });
 
   // Voice upload state
@@ -596,6 +606,32 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
 
           {step === 5 && (
             <motion.div key="step5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <div>
+                <h3 className="text-lg text-white mb-1">AI Avatar (Coming Soon)</h3>
+                <p className="text-sm text-zinc-400 mb-6">
+                  Custom AI avatar training will be available in a future release. If you already have a LiveAvatar avatar, enter the Avatar ID below.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">Avatar ID (Optional)</label>
+                <input
+                  type="text"
+                  name="avatar_id"
+                  value={formData.avatar_id}
+                  onChange={handleChange}
+                  className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-zinc-500 transition-colors"
+                  placeholder="e.g. la_avatar_123456"
+                />
+                <p className="text-xs text-zinc-600 mt-1.5">
+                  If set, Pratibimb will initiate a LiveAvatar streaming video layer.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 6 && (
+            <motion.div key="step6" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
               <LocalMemoriesSection 
                 localMemories={localMemories} 
                 setLocalMemories={setLocalMemories} 

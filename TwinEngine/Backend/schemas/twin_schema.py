@@ -16,6 +16,8 @@ class TwinBase(BaseModel):
     voice_url: Optional[str] = None
     voice_id: Optional[str] = None
     languages: Optional[str] = None       # comma-separated BCP-47 codes
+    avatar_provider: Optional[str] = None
+    avatar_id: Optional[str] = None
 
 
 class TwinCreate(TwinBase):

@@ -19,7 +19,8 @@ class RedisMemoryService:
                 self.redis_url, 
                 socket_timeout=0.05, 
                 socket_connect_timeout=0.05, 
-                decode_responses=True
+                decode_responses=True,
+                protocol=2
             )
         return self._redis_client
 

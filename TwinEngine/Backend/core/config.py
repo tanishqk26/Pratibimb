@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     sarvam_api_key: str = ""
     elevenlabs_api_key: str = ""
     openai_api_key: str = ""
+    liveavatar_api_key: str = ""
 
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 50

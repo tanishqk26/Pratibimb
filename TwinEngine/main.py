@@ -1,7 +1,10 @@
 import asyncio
 import os
+import time
 import json
 import base64
+import uuid
+import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from sarvamai import AsyncSarvamAI
@@ -10,6 +13,7 @@ from stt.sarvam_stream import SarvamSTT
 from llm.gemini_engine import GeminiEngine
 from tts.eleven_ws import ElevenTTS
 from engine.conversation_engine import ConversationEngine
+from services.avatar import avatar_manager
 
 load_dotenv()
 
@@ -41,9 +45,15 @@ async def voice_websocket(websocket: WebSocket):
     # Background task that collects STT partials while recording
     _stt_collector_task: asyncio.Task | None = None
 
-    # ── Wait for twin_context handshake ──────────────────────────────────────
+    # ── LiveAvatar state ─────────────────────────────────────────────────────
     twin_language_codes = None  # will hold parsed BCP-47 list
     twin_data = None
+    avatar_ws = None            # WebSocket connection to LiveAvatar control channel
+    avatar_session_id = None
+    avatar_keepalive_task = None
+    avatar_listener_task = None
+
+    # ── Wait for twin_context handshake ──────────────────────────────────────
     try:
         first = await asyncio.wait_for(websocket.receive(), timeout=5.0)
         if "text" in first:
@@ -52,9 +62,8 @@ async def voice_websocket(websocket: WebSocket):
                 twin = msg.get("twin", {})
                 twin_data = twin
                 llm.set_twin(twin)
-                
+
                 # Extract session_id or generate a new random UUID
-                import uuid
                 session_id = msg.get("session_id") or str(uuid.uuid4())
                 engine.session_id = session_id
                 print(f"[Main] Twin context loaded: {twin.get('name', 'Unknown')} (session_id={session_id})")
@@ -74,6 +83,100 @@ async def voice_websocket(websocket: WebSocket):
                     print(f"[Main] Twin languages: {twin_language_codes}")
                 else:
                     print("[Main] No languages configured — STT will auto-detect all.")
+
+                # ── LiveAvatar LITE Mode Session ──────────────────────────────────
+                avatar_id = twin.get("avatar_id")
+                if avatar_id:
+                    try:
+                        print(f"[Main] Starting LiveAvatar LITE session for avatar={avatar_id}")
+                        session_data = await avatar_manager.create_session(avatar_id)
+                        avatar_session_id    = session_data["session_id"]
+                        livekit_url          = session_data["livekit_url"]
+                        livekit_client_token = session_data["livekit_client_token"]
+                        avatar_ws_url        = session_data.get("ws_url")
+
+                        print(f"[Main] LiveAvatar session created: {avatar_session_id}")
+
+                        # ── Open control WebSocket to LiveAvatar ──────────────
+                        if avatar_ws_url:
+                            avatar_ws = await websockets.connect(avatar_ws_url)
+                            connected_event = asyncio.Event()
+
+                            async def listen_avatar_events():
+                                try:
+                                    async for raw in avatar_ws:
+                                        try:
+                                            ev = json.loads(raw)
+                                            t_now = int(time.time() * 1000)
+                                            ev_type = ev.get("type") or ""
+                                            print(f"[Main] LiveAvatar WS event: {ev_type} at {t_now} ms. Full event: {ev}")
+                                            
+                                            if ev_type == "session.state_updated" and ev.get("state") == "connected":
+                                                connected_event.set()
+                                            
+                                            # Measure acknowledgement latency
+                                            if getattr(tts, "expect_avatar_event", False):
+                                                tts.expect_avatar_event = False
+                                                print(f"[⏱ LATENCY] 4. First LiveAvatar acknowledgement/event '{ev_type}' at: {t_now} ms")
+
+                                            # Log telemetry for speaking delay
+                                            if ev_type == "agent.speak_started":
+                                                fw_time = getattr(tts, "_first_chunk_forwarded_time", None)
+                                                if fw_time:
+                                                    tts._first_chunk_forwarded_time = None  # reset
+                                                    delay = t_now - fw_time
+                                                    print(f"[TELEMETRY] Avatar start delay: {delay} ms | session_id: {session_id} | twin_id: {twin_data.get('id') if twin_data else None}")
+                                                    try:
+                                                        await websocket.send_text(json.dumps({
+                                                            "type": "telemetry",
+                                                            "metric": "avatar_start_delay_ms",
+                                                            "value": delay,
+                                                            "session_id": session_id,
+                                                            "twin_id": twin_data.get("id") if twin_data else None
+                                                        }))
+                                                    except Exception:
+                                                        pass
+                                        except Exception as parse_err:
+                                            print(f"[Main] Error parsing LiveAvatar event: {parse_err}")
+                                except Exception as ws_err:
+                                    print(f"[Main] LiveAvatar WS read error/disconnect: {ws_err}")
+
+                            # Start the listener task in the background
+                            avatar_listener_task = asyncio.create_task(listen_avatar_events())
+
+                            # Wait for session.state_updated → "connected"
+                            await asyncio.wait_for(connected_event.wait(), timeout=15.0)
+                            print("[Main] LiveAvatar WS state: connected ✓")
+
+                            # Attach to TTS so every ElevenLabs chunk is forwarded as agent.speak
+                            tts.set_avatar_ws(avatar_ws)
+
+                            # Periodic keep-alive every 30 s to prevent 5-min idle timeout
+                            async def _keepalive():
+                                while True:
+                                    await asyncio.sleep(30)
+                                    try:
+                                        if avatar_ws.open:
+                                            await avatar_ws.send(json.dumps({
+                                                "type": "session.keep_alive",
+                                                "event_id": str(uuid.uuid4())
+                                            }))
+                                    except Exception:
+                                        break
+
+                            avatar_keepalive_task = asyncio.create_task(_keepalive())
+
+                        # Send LiveKit room credentials to frontend so it can connect
+                        await websocket.send_text(json.dumps({
+                            "type": "avatar_session",
+                            "session_id":           avatar_session_id,
+                            "livekit_url":          livekit_url,
+                            "livekit_client_token": livekit_client_token,
+                        }))
+
+                    except Exception as ae:
+                        print(f"[Main] LiveAvatar session failed (will continue voice-only): {ae}")
+
     except asyncio.TimeoutError:
         print("[Main] No twin context received, using default persona.")
     except Exception as e:
@@ -128,6 +231,17 @@ async def voice_websocket(websocket: WebSocket):
                     # Cancel any running LLM/TTS pipeline immediately
                     await engine.barge_in()
 
+                    # Interrupt avatar speaking
+                    if avatar_ws:
+                        try:
+                            await avatar_ws.send(json.dumps({"type": "agent.interrupt"}))
+                            await avatar_ws.send(json.dumps({
+                                "type": "agent.start_listening",
+                                "event_id": str(uuid.uuid4())
+                            }))
+                        except Exception:
+                            pass
+
                     # Start collecting STT transcripts
                     if _stt_collector_task and not _stt_collector_task.done():
                         _stt_collector_task.cancel()
@@ -137,6 +251,16 @@ async def voice_websocket(websocket: WebSocket):
                 elif event_type == "speech_end":
                     print("[Main] PTT speech_end received — processing transcript.")
                     _recording = False
+
+                    # Transition avatar out of listening pose
+                    if avatar_ws:
+                        try:
+                            await avatar_ws.send(json.dumps({
+                                "type": "agent.stop_listening",
+                                "event_id": str(uuid.uuid4())
+                            }))
+                        except Exception:
+                            pass
 
                     # Stop the STT collector
                     if _stt_collector_task and not _stt_collector_task.done():
@@ -178,7 +302,23 @@ async def voice_websocket(websocket: WebSocket):
             _stt_collector_task.cancel()
         await stt.close()
         await tts.cancel()
-        
+
+        # Tear down LiveAvatar session
+        if avatar_keepalive_task and not avatar_keepalive_task.done():
+            avatar_keepalive_task.cancel()
+        if avatar_listener_task and not avatar_listener_task.done():
+            avatar_listener_task.cancel()
+        if avatar_ws:
+            try:
+                await avatar_ws.close()
+            except Exception:
+                pass
+        if avatar_session_id:
+            try:
+                asyncio.create_task(avatar_manager.stop_session(avatar_session_id))
+            except Exception:
+                pass
+
         # Save session if there are messages
         if engine.session_messages and twin_data and twin_data.get("id"):
             try:

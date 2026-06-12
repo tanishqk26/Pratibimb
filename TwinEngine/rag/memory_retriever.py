@@ -58,6 +58,12 @@ def _parse_embedding(raw) -> Optional[list[float]]:
 # Singleton local model loader
 _MODEL = None
 
+# In-process cache: memory_row_id → parsed embedding vector
+# Avoids re-parsing JSON floats on every BG RAG call.
+# Bounded at 500 entries to cap RAM (~500 × 1536 × 8 bytes ≈ 6 MB)
+_EMBEDDING_CACHE: dict[int, list[float]] = {}
+_EMBEDDING_CACHE_MAX = 500
+
 def _get_local_model():
     global _MODEL
     if _MODEL is None:
@@ -68,18 +74,23 @@ def _get_local_model():
     return _MODEL
 
 LOW_VALUE_MESSAGES = {
-    "ok", "okay", "yes", "no",
-    "hmm", "huh", "nice",
-    "tell me more"
+    "ok", "okay", "yes", "no", "sure", "thanks", "thank you",
+    "hmm", "huh", "nice", "tell me more",
+    "नमस्कार", "नमस्ते", "हो", "बरोबर", "नाही", "ठीक", "ठीक आहे"
 }
 
 def should_skip_embedding(text: str) -> bool:
     if not text:
         return True
-    text_clean = text.strip().lower()
-    words = text_clean.split()
-    if len(words) < 5 or text_clean in LOW_VALUE_MESSAGES:
+    text_clean = text.strip().lower().strip("?.!,")
+    if text_clean in LOW_VALUE_MESSAGES:
         return True
+    
+    words = text_clean.split()
+    if len(words) <= 2:
+        # If extremely short, and any word is a social filler, skip
+        if any(w in LOW_VALUE_MESSAGES for w in words):
+            return True
     return False
 
 def get_query_embedding(query: str) -> list[float]:
@@ -158,7 +169,19 @@ def retrieve_relevant_memories(
         no_emb_count = 0
 
         for row in rows:
-            mem_emb = _parse_embedding(row["embedding"])
+            row_id = row["id"]
+            # Use cached parsed embedding if available
+            if row_id in _EMBEDDING_CACHE:
+                mem_emb = _EMBEDDING_CACHE[row_id]
+            else:
+                mem_emb = _parse_embedding(row["embedding"])
+                if mem_emb is not None:
+                    # Store in cache (evict oldest if full)
+                    if len(_EMBEDDING_CACHE) >= _EMBEDDING_CACHE_MAX:
+                        oldest_key = next(iter(_EMBEDDING_CACHE))
+                        del _EMBEDDING_CACHE[oldest_key]
+                    _EMBEDDING_CACHE[row_id] = mem_emb
+
             if mem_emb is None:
                 no_emb_count += 1
                 continue
