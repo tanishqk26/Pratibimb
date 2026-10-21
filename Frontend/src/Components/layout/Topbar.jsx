@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BrandLogo from '../ui/BrandLogo';
+import { API_URL, WS_URL } from '../../config/api';
 
 export default function Topbar() {
   const navigate = useNavigate();
@@ -11,7 +12,7 @@ export default function Topbar() {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const res = await fetch('http://localhost:8000/auth/me', {
+        const res = await fetch(`${API_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {

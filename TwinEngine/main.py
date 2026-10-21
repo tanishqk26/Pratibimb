@@ -21,6 +21,10 @@ SARVAM_API_KEY     = os.getenv("SARVAM_API_KEY")
 GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
+# URL of the main REST backend (Backend/) that owns the DB.
+# In prod set BACKEND_API_URL=https://your-api.onrender.com
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000")
+
 app = FastAPI()
 
 @app.websocket("/ws/voice")
@@ -329,7 +333,7 @@ async def voice_websocket(websocket: WebSocket):
                         "user_id": twin_data.get("user_id")
                     }
                     await client.post(
-                        f"http://localhost:8000/conversations/internal/twin/{twin_data.get('id')}",
+                        f"{BACKEND_API_URL}/conversations/internal/twin/{twin_data.get('id')}",
                         json=payload
                     )
                     print(f"[Main] Conversation session saved with {len(engine.session_messages)} messages.")
@@ -338,4 +342,5 @@ async def voice_websocket(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.getenv("PORT", "8001"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

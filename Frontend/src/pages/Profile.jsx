@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { User, Mail, Calendar, Edit2, Users, History, MessageSquare } from 'lucide-react';
 import { ProfileField } from '../components/ui/Cards';
+import { API_URL, WS_URL } from '../config/api';
 
 const parseUTCDate = (dateStr) => {
   if (!dateStr) return new Date();
@@ -28,7 +29,7 @@ export default function Profile() {
         if (!token) return;
 
         // Fetch User Data
-        const userRes = await fetch('http://localhost:8000/auth/me', {
+        const userRes = await fetch(`${API_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -42,7 +43,7 @@ export default function Profile() {
         }
 
         // Fetch Twins & Memories
-        const twinsRes = await fetch('http://localhost:8000/twins', {
+        const twinsRes = await fetch(`${API_URL}/twins`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -53,7 +54,7 @@ export default function Profile() {
           
           await Promise.all(twinsData.map(async (twin) => {
             try {
-              const memRes = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
+              const memRes = await fetch(`${API_URL}/memories/twin/${twin.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (memRes.ok) {
@@ -65,7 +66,7 @@ export default function Profile() {
             }
 
             try {
-              const convoRes = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+              const convoRes = await fetch(`${API_URL}/conversations/twin/${twin.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (convoRes.ok) {
@@ -98,7 +99,7 @@ export default function Profile() {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch('http://localhost:8000/auth/me', {
+      const res = await fetch(`${API_URL}/auth/me`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',

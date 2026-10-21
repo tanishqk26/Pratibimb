@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Activity, ArrowRight, MessageSquare, X } from 'lucide-react';
 import hero1 from '../assets/images/hero1.png';
 import etherealFace from '../assets/images/ethereal_face.png';
+import { API_URL, WS_URL } from '../config/api';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -54,7 +55,7 @@ export default function Dashboard() {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const res = await fetch('http://localhost:8000/auth/me', {
+        const res = await fetch(`${API_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -71,7 +72,7 @@ export default function Dashboard() {
         const token = localStorage.getItem('token');
         if (!token) return;
         
-        const res = await fetch('http://localhost:8000/twins', {
+        const res = await fetch(`${API_URL}/twins`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -95,7 +96,7 @@ export default function Dashboard() {
 
           await Promise.all(twinsData.map(async (twin) => {
             try {
-              const memRes = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
+              const memRes = await fetch(`${API_URL}/memories/twin/${twin.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (memRes.ok) {
@@ -105,7 +106,7 @@ export default function Dashboard() {
             } catch (e) {}
 
             try {
-              const convoRes = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+              const convoRes = await fetch(`${API_URL}/conversations/twin/${twin.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (convoRes.ok) {

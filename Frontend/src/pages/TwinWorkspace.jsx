@@ -5,6 +5,7 @@ import { ArrowLeft, MessageSquare, History, User, Settings, Plus, Edit2, Trash2,
 import { ToggleButton } from '../components/ui/Buttons';
 import LanguageSelect, { SARVAM_LANGUAGES } from '../Components/ui/LanguageSelect';
 import MemoriesTab from './Memory';
+import { API_URL, WS_URL, VOICE_CLONE_ENABLED } from '../config/api';
 
 const parseUTCDate = (dateStr) => {
   if (!dateStr) return new Date();
@@ -24,7 +25,7 @@ export default function TwinWorkspace() {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const res = await fetch(`http://localhost:8000/twins/${twinId}`, {
+        const res = await fetch(`${API_URL}/twins/${twinId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -123,7 +124,7 @@ function ChatTab({ twin }) {
     const fetchConversations = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+        const res = await fetch(`${API_URL}/conversations/twin/${twin.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -143,7 +144,7 @@ function ChatTab({ twin }) {
     e.stopPropagation();
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:8000/conversations/${convId}`, {
+      const res = await fetch(`${API_URL}/conversations/${convId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -318,7 +319,7 @@ function ProfileTab({ twin, setTwin }) {
       files.forEach(f => fd.append('files', f));
       fd.append('voice_name', trimmedName.slice(0, 100));
 
-      const res = await fetch('http://localhost:8000/voice/clone', {
+      const res = await fetch(`${API_URL}/voice/clone`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
@@ -349,7 +350,7 @@ function ProfileTab({ twin, setTwin }) {
         age: formData.age ? parseInt(formData.age) : null
       };
 
-      const res = await fetch(`http://localhost:8000/twins/${twin.id}`, {
+      const res = await fetch(`${API_URL}/twins/${twin.id}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -510,9 +511,17 @@ function ProfileTab({ twin, setTwin }) {
               <p className="text-xs text-zinc-600 mt-1.5">{voiceName.trim().length}/100 characters</p>
             </div>
 
+            {!VOICE_CLONE_ENABLED && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                <span className="font-semibold">Demo mode:</span> voice cloning uses a paid ElevenLabs plan and is disabled in this public demo. Your twin will use a free preset voice.
+              </div>
+            )}
+
             <label
               className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all
-                ${ !voiceName.trim()
+                ${ !VOICE_CLONE_ENABLED
+                    ? 'border-amber-500/20 bg-amber-500/5 opacity-50 cursor-not-allowed pointer-events-none'
+                    : !voiceName.trim()
                     ? 'border-zinc-800/40 bg-zinc-900/10 opacity-50 cursor-not-allowed'
                     : voiceUploadState.status === 'done'
                     ? 'border-green-500/40 bg-green-500/5 cursor-pointer'
@@ -526,7 +535,7 @@ function ProfileTab({ twin, setTwin }) {
                 accept={ALLOWED_VOICE_TYPES}
                 onChange={handleVoiceUpload}
                 className="hidden"
-                disabled={voiceUploadState.status === 'uploading' || !voiceName.trim()}
+                disabled={!VOICE_CLONE_ENABLED || voiceUploadState.status === 'uploading' || !voiceName.trim()}
                 multiple
               />
               <div className={`w-12 h-12 rounded-full flex items-center justify-center ${ voiceUploadState.status === 'done' ? 'bg-green-500/10' : 'bg-zinc-900' }`}>
@@ -761,14 +770,14 @@ function SettingsTab({ twin }) {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const getRes = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
+      const getRes = await fetch(`${API_URL}/memories/twin/${twin.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       if (getRes.ok) {
         const memories = await getRes.json();
         await Promise.all(memories.map(mem => 
-          fetch(`http://localhost:8000/memories/${mem.id}`, {
+          fetch(`${API_URL}/memories/${mem.id}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
           })
@@ -788,7 +797,7 @@ function SettingsTab({ twin }) {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      await fetch(`http://localhost:8000/conversations/twin/${twin.id}/all`, {
+      await fetch(`${API_URL}/conversations/twin/${twin.id}/all`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -806,7 +815,7 @@ function SettingsTab({ twin }) {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const res = await fetch(`http://localhost:8000/twins/${twin.id}`, {
+      const res = await fetch(`${API_URL}/twins/${twin.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

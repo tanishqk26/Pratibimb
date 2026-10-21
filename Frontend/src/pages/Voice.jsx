@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Mic, X, History } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import etherealFace from '../assets/images/ethereal_face.png';
+import { API_URL, WS_URL } from '../config/api';
 
 export default function Voice() {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ export default function Voice() {
           setIsReady(true);
           return;
         }
-        const res = await fetch(`http://localhost:8000/twins/${initialTwin.id}`, {
+        const res = await fetch(`${API_URL}/twins/${initialTwin.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -132,7 +133,7 @@ export default function Voice() {
     if (!isReady) return;
 
     // Connect to FastAPI WebSocket Gateway
-    wsRef.current = new WebSocket("ws://localhost:8001/ws/voice");
+    wsRef.current = new WebSocket(`${WS_URL}/ws/voice`);
 
     wsRef.current.onopen = () => {
       console.log("WebSocket Connected");

@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+httpx
+websockets
+sarvamai
+google-genai
+redis

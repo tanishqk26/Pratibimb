@@ -1,0 +1,43 @@
+# Render.com blueprint — deploys both backends on the free plan.
+# After pushing, go to render.com → "New +" → "Blueprint" → point at this repo.
+# Then set secrets (SECRET_KEY, API keys) in the Render dashboard.
+services:
+  - type: web
+    name: pratibimb-api
+    runtime: python
+    plan: free
+    rootDir: TwinEngine/Backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENV
+        value: prod
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: LIVEAVATAR_API_KEY
+        sync: false
+
+  - type: web
+    name: pratibimb-voice
+    runtime: python
+    plan: free
+    rootDir: TwinEngine
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BACKEND_API_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false

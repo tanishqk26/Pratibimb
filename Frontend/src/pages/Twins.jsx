@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, MessageSquare, ArrowRight, ArrowLeft, Upload, Mic, Search, X, Video } from 'lucide-react';
 import LanguageSelect from '../Components/ui/LanguageSelect';
 import { LocalMemoriesSection } from './Memory';
+import { API_URL, WS_URL, VOICE_CLONE_ENABLED } from '../config/api';
 
 export default function Twins() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export default function Twins() {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch('http://localhost:8000/twins', {
+      const res = await fetch(`${API_URL}/twins`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -25,7 +26,7 @@ export default function Twins() {
           let memoryCount = 0;
           let conversationCount = 0;
           try {
-            const memRes = await fetch(`http://localhost:8000/memories/twin/${twin.id}`, {
+            const memRes = await fetch(`${API_URL}/memories/twin/${twin.id}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
             if (memRes.ok) {
@@ -36,7 +37,7 @@ export default function Twins() {
             console.error('Failed to fetch memories for twin', twin.id);
           }
           try {
-            const convoRes = await fetch(`http://localhost:8000/conversations/twin/${twin.id}`, {
+            const convoRes = await fetch(`${API_URL}/conversations/twin/${twin.id}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
             if (convoRes.ok) {
@@ -60,7 +61,7 @@ export default function Twins() {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`http://localhost:8000/twins/${deletingTwinId}`, {
+      const res = await fetch(`${API_URL}/twins/${deletingTwinId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -231,7 +232,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
       const fetchMems = async () => {
         try {
           const token = localStorage.getItem('token');
-          const res = await fetch(`http://localhost:8000/memories/twin/${initialData.id}`, {
+          const res = await fetch(`${API_URL}/memories/twin/${initialData.id}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
@@ -281,7 +282,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
       });
       fd.append('voice_name', trimmedName.slice(0, 100)); // ElevenLabs max 100 chars
 
-      const res = await fetch('http://localhost:8000/voice/clone', {
+      const res = await fetch(`${API_URL}/voice/clone`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
@@ -312,7 +313,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
         age: formData.age ? parseInt(formData.age) : null
       };
 
-      const url = initialData ? `http://localhost:8000/twins/${initialData.id}` : 'http://localhost:8000/twins';
+      const url = initialData ? `${API_URL}/twins/${initialData.id}` : `${API_URL}/twins`;
       const method = initialData ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -330,13 +331,13 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
         // Handle memories
         for (const mem of localMemories) {
           if (!mem.id) {
-            await fetch('http://localhost:8000/memories', {
+            await fetch(`${API_URL}/memories`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({ title: mem.title, content: mem.content, twin_id: savedTwin.id })
             });
           } else if (mem._isEdited) {
-            await fetch(`http://localhost:8000/memories/${mem.id}`, {
+            await fetch(`${API_URL}/memories/${mem.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({ title: mem.title, content: mem.content })
@@ -345,7 +346,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
         }
         
         for (const delId of deletedMemories) {
-          await fetch(`http://localhost:8000/memories/${delId}`, {
+          await fetch(`${API_URL}/memories/${delId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -473,9 +474,17 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
                 <p className="text-xs text-zinc-600 mt-1.5">{voiceName.trim().length}/100 characters</p>
               </div>
 
+              {!VOICE_CLONE_ENABLED && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                  <span className="font-semibold">Demo mode:</span> voice cloning uses a paid ElevenLabs plan and is disabled in this public demo. Your twin will use a free preset voice.
+                </div>
+              )}
+
               <label
                 className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-4 transition-all
-                  ${ !voiceName.trim()
+                  ${ !VOICE_CLONE_ENABLED
+                      ? 'border-amber-500/20 bg-amber-500/5 opacity-50 cursor-not-allowed pointer-events-none'
+                      : !voiceName.trim()
                       ? 'border-zinc-800/40 bg-zinc-900/10 opacity-50 cursor-not-allowed'
                       : voiceUploadState.status === 'done'
                       ? 'border-green-500/40 bg-green-500/5 cursor-pointer'
@@ -489,7 +498,7 @@ function TwinCreationForm({ onCancel, onSuccess, initialData }) {
                   accept="audio/mp3,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/m4a,audio/x-m4a"
                   onChange={handleVoiceUpload}
                   className="hidden"
-                  disabled={voiceUploadState.status === 'uploading' || !voiceName.trim()}
+                  disabled={!VOICE_CLONE_ENABLED || voiceUploadState.status === 'uploading' || !voiceName.trim()}
                   multiple
                 />
 

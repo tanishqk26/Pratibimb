@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Edit2, Trash2, X, RefreshCw, Check } from 'lucide-react';
+import { API_URL, WS_URL } from '../config/api';
 
 const parseUTCDate = (dateStr) => {
   if (!dateStr) return new Date();
@@ -27,7 +28,7 @@ function SyncButton({ memory, onSyncTriggered }) {
     setSyncing(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:8000/memories/${memory.id}/index`, {
+      const res = await fetch(`${API_URL}/memories/${memory.id}/index`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -110,7 +111,7 @@ export default function MemoriesTab({ twin: propTwin }) {
         try {
           const token = localStorage.getItem('token');
           if (!token) return;
-          const res = await fetch('http://localhost:8000/twins', {
+          const res = await fetch(`${API_URL}/twins`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
@@ -138,7 +139,7 @@ export default function MemoriesTab({ twin: propTwin }) {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`http://localhost:8000/memories/twin/${selectedTwin.id}`, {
+      const res = await fetch(`${API_URL}/memories/twin/${selectedTwin.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -223,11 +224,11 @@ export default function MemoriesTab({ twin: propTwin }) {
         content: formData.content,
       };
 
-      let url = 'http://localhost:8000/memories';
+      let url = `${API_URL}/memories`;
       let method = 'POST';
 
       if (editingMemory) {
-        url = `http://localhost:8000/memories/${editingMemory.id}`;
+        url = `${API_URL}/memories/${editingMemory.id}`;
         method = 'PUT';
       } else {
         payload.twin_id = selectedTwin.id;
@@ -260,7 +261,7 @@ export default function MemoriesTab({ twin: propTwin }) {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const res = await fetch(`http://localhost:8000/memories/${memoryToDelete}`, {
+      const res = await fetch(`${API_URL}/memories/${memoryToDelete}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -475,7 +476,7 @@ export function LocalMemoriesSection({ localMemories, setLocalMemories, setDelet
     setSyncingIds(prev => new Set(prev).add(mem.id));
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:8000/memories/${mem.id}/index`, {
+      const res = await fetch(`${API_URL}/memories/${mem.id}/index`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -501,7 +502,7 @@ export function LocalMemoriesSection({ localMemories, setLocalMemories, setDelet
           clearInterval(interval);
           return;
         }
-        const res = await fetch(`http://localhost:8000/memories/twin/${mem.twin_id}`, {
+        const res = await fetch(`${API_URL}/memories/twin/${mem.twin_id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {

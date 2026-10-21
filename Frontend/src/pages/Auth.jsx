@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import BrandLogo from '../components/ui/BrandLogo';
+import { API_URL, WS_URL } from '../config/api';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const endpoint = isRegistering ? '/auth/register' : '/auth/login';
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(isRegistering ? { name, email, password } : { email, password })
@@ -38,7 +39,7 @@ export default function Auth() {
 
       if (isRegistering) {
         // Automatically login after register
-        const loginRes = await fetch('http://localhost:8000/auth/login', {
+        const loginRes = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })

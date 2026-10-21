@@ -14,9 +14,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
+if settings.secret_key == "change-me-in-production":
+    logger.warning(
+        "SECRET_KEY is the default placeholder — set a strong SECRET_KEY env var in production."
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,5 +82,8 @@ def health():
     return {"status": "ok", "service": "pratibimb-api"}
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", "8000"))
+    reload = os.getenv("ENV", "dev") == "dev"
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)
