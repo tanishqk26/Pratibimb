@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, MessageSquare, History, User, Settings, Plus, Edit2, Trash2, Mic, Upload, X, Video } from 'lucide-react';
 import { ToggleButton } from '../components/ui/Buttons';
-import LanguageSelect, { SARVAM_LANGUAGES } from '../Components/ui/LanguageSelect';
+import LanguageSelect, { SARVAM_LANGUAGES } from '../components/ui/LanguageSelect';
 import MemoriesTab from './Memory';
 import { API_URL, WS_URL, VOICE_CLONE_ENABLED } from '../config/api';
 

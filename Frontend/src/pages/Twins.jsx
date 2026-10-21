@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, MessageSquare, ArrowRight, ArrowLeft, Upload, Mic, Search, X, Video } from 'lucide-react';
-import LanguageSelect from '../Components/ui/LanguageSelect';
+import LanguageSelect from '../components/ui/LanguageSelect';
 import { LocalMemoriesSection } from './Memory';
 import { API_URL, WS_URL, VOICE_CLONE_ENABLED } from '../config/api';
 
