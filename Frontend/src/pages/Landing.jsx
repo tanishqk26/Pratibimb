@@ -173,9 +173,14 @@ export default function Landing() {
             <button onClick={handleStart} className="px-10 py-5 bg-white text-black text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all">
               Begin Initialization
             </button>
-            <button className="px-10 py-5 border border-border-subtle text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all">
-              Read Whitepaper
-            </button>
+            <a
+              href="https://www.researchgate.net/publication/405488972_Pratibimb_A_Real-Time_AI_Twin_for_Conversational_Intelligence_and_Digital_Presence"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-10 py-5 border border-border-subtle text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-all text-center"
+            >
+              Read Research Paper
+            </a>
           </div>
         </div>
       </section>
